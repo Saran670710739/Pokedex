@@ -1,27 +1,29 @@
 
 import Navbar from "./components/Navbar";
-import PokemonCard from "./components/PokemonCard";
+import PokemonGrid from "./components/PokemonGrid";
+import pokemon from "./data/pokemon";
 
 function App() {
   return (
-    <div id="home">
+    <div id="home" className="min-h-screen bg-gray-100">
       <Navbar title="PokémonHub" />
 
-      <main id="pokemon">
-        <h1>Welcome to PokémonHub</h1>
-        <p>Explore your favorite Pokémon!</p>
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <h1 className="mb-3 text-4xl font-bold">
+          Welcome to PokémonHub
+        </h1>
 
-        <PokemonCard
-          name="Pikachu"
-          type="Electric"
-          image="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png"
-        />
+        <p className="mb-10 text-gray-600">
+          Explore your favorite Pokémon!
+        </p>
 
-        <PokemonCard
-          name="Charmander"
-          type="Fire"
-          image="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png"
-        />
+        <section id="pokemon">
+          <h2 className="mb-6 text-2xl font-bold">
+            Pokémon List
+          </h2>
+
+          <PokemonGrid pokemons={pokemon} />
+        </section>
       </main>
     </div>
   );
