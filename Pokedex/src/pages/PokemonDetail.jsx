@@ -379,7 +379,7 @@ function PokemonDetail({ wishlistIds = [], onToggleWishlist }) {
                   type="button"
                   onClick={() => onToggleWishlist?.(pokemon.id)}
                   aria-pressed={isWishlisted}
-                  className="rounded-xl bg-[#202640] px-5 py-3 text-sm font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-[#343b60]"
+                  className={`rounded-xl px-5 py-3 text-sm font-bold text-white shadow-md shadow-red-200/40 transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 ${isWishlisted ? "bg-red-600 hover:bg-red-700" : "bg-rose-500 hover:bg-rose-600"}`} 
                 >
                   {isWishlisted ? "♥ Remove Wishlist" : "♡ Add to Wishlist"}
                 </button>
