@@ -11,6 +11,7 @@ import PokemonDetail from "./pages/PokemonDetail";
 import Watchlist from "./pages/Watchlist";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
+import ApiLab from "./pages/ApiLab";
 
 const STORAGE_KEY = "pokemonhub-wishlist";
 
@@ -94,6 +95,7 @@ function App() {
   }
 />
           <Route path="/about" element={<About />} />
+          <Route path="/api-lab" element={<ApiLab />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
