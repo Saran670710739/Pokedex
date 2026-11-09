@@ -5,18 +5,17 @@ export async function onceADay(key, loader) {
   const today = new Date().toDateString();
 
   try {
-    const saved = JSON.parse(
-      localStorage.getItem(key) || "null"
-    );
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
 
     if (
-      saved?.date === today &&
-      Array.isArray(saved.data)
+      saved &&
+      saved.date === today &&
+      Object.prototype.hasOwnProperty.call(saved, "data")
     ) {
       return saved.data;
     }
   } catch {
-    // ถ้าอ่าน cache ไม่ได้ ให้โหลดจาก API
+    // localStorage อาจใช้งานไม่ได้ หรือข้อมูลเสีย
   }
 
   if (pendingRequests.has(key)) {
@@ -32,7 +31,7 @@ export async function onceADay(key, loader) {
         JSON.stringify({ date: today, data })
       );
     } catch {
-      // ถ้าบันทึกไม่ได้ ก็ยังแสดงข้อมูลได้
+      // ยังใช้ข้อมูลจาก API ได้ แม้บันทึก cache ไม่สำเร็จ
     }
 
     return data;
@@ -51,6 +50,6 @@ export function forget(key) {
   try {
     localStorage.removeItem(key);
   } catch {
-    // กรณี localStorage ไม่พร้อมใช้งาน
+    // การลบ cache ไม่ควรทำให้แอปพัง
   }
 }

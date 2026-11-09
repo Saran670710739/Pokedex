@@ -1,21 +1,23 @@
+
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import pokemon from "../data/pokemon";
 
-function PokemonGallery() {
-  // เริ่มจากตัวสุดท้าย (Gengar ในข้อมูล 6 ตัวของเรา) ให้ใกล้เคียงภาพตัวอย่าง
-  const [index, setIndex] = useState(pokemon.length - 1);
+function PokemonGallery({ pokemons = [] }) {
+  const [index, setIndex] = useState(5);
   const [showMore, setShowMore] = useState(false);
-  const currentPokemon = pokemon[index];
+
+  if (pokemons.length === 0) return null;
+
+  const currentPokemon = pokemons[index % pokemons.length];
+  const displayNumber = (index % pokemons.length) + 1;
 
   function handleNextClick() {
-    setIndex((current) => (current + 1) % pokemon.length);
+    setIndex((current) => (current + 1) % pokemons.length);
     setShowMore(false);
   }
 
   return (
     <div className="relative overflow-hidden rounded-[26px] border border-white/90 bg-white/75 p-6 shadow-xl shadow-slate-200/60 backdrop-blur-sm sm:p-7">
-      {/* รูปจางด้านหลัง ช่วยให้ดูคล้าย Reference */}
       <img
         src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${currentPokemon.id}.png`}
         alt=""
@@ -42,20 +44,23 @@ function PokemonGallery() {
             <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">
               {currentPokemon.name}
             </h2>
+
             <p className="mt-1 text-sm font-medium text-slate-500">
-              ตัวที่ {index + 1} จาก {pokemon.length}
+              ตัวที่ {displayNumber} จาก {pokemons.length}
             </p>
+
             <p className="mt-4 text-sm text-slate-500">
               Type:{" "}
               <span className="rounded-full bg-violet-100 px-3 py-1 font-bold text-violet-700">
                 {currentPokemon.type}
               </span>
             </p>
+
             <Link
               to={`/pokemon/${currentPokemon.id}`}
               className="mt-5 inline-flex items-center gap-2 font-bold text-blue-600 hover:underline"
             >
-              ดูรายละเอียด <span aria-hidden="true">→</span>
+              ดูรายละเอียด →
             </Link>
           </div>
         </div>
@@ -74,6 +79,7 @@ function PokemonGallery() {
           >
             {showMore ? "ซ่อนคำอธิบาย" : "อ่านคำอธิบาย"}
           </button>
+
           <button
             type="button"
             onClick={handleNextClick}
