@@ -1,7 +1,7 @@
 
 import { onceADay, forget } from "./cache";
 
-const BASE_URL = "https://pokeapi.co/api/v2";
+const BASE_URL = process.env.REACT_APP_POKEAPI_BASE_URL;
 const LIST_CACHE_KEY = "pokemonhub-api-list-v2";
 const DETAIL_CACHE_PREFIX = "pokemonhub-api-detail-v2-";
 
