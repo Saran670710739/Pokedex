@@ -1,70 +1,86 @@
-
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import pokemon from "../data/pokemon";
 
 function PokemonGallery() {
-  const [index, setIndex] = useState(0);
+  // เริ่มจากตัวสุดท้าย (Gengar ในข้อมูล 6 ตัวของเรา) ให้ใกล้เคียงภาพตัวอย่าง
+  const [index, setIndex] = useState(pokemon.length - 1);
   const [showMore, setShowMore] = useState(false);
-
   const currentPokemon = pokemon[index];
 
   function handleNextClick() {
-    if (index < pokemon.length - 1) {
-      setIndex(index + 1);
-    } else {
-      setIndex(0);
-    }
-
+    setIndex((current) => (current + 1) % pokemon.length);
     setShowMore(false);
   }
 
-  function handleMoreClick() {
-    setShowMore(!showMore);
-  }
-
   return (
-    <div className="mx-auto max-w-2xl rounded-xl bg-white p-6 shadow-md">
-      <button
-        type="button"
-        onClick={handleNextClick}
-        className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
-      >
-        Pokémon ตัวถัดไป
-      </button>
+    <div className="relative overflow-hidden rounded-[26px] border border-white/90 bg-white/75 p-6 shadow-xl shadow-slate-200/60 backdrop-blur-sm sm:p-7">
+      {/* รูปจางด้านหลัง ช่วยให้ดูคล้าย Reference */}
+      <img
+        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${currentPokemon.id}.png`}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-10 h-56 w-56 object-contain opacity-[0.08]"
+      />
 
-      <div className="mt-6 flex flex-col items-center gap-6 sm:flex-row">
-        <img
-          src={currentPokemon.image}
-          alt={currentPokemon.name}
-          className="h-40 w-40 object-contain"
-        />
+      <div className="relative z-10">
+        <span className="inline-flex rounded-full bg-blue-50 px-4 py-2 text-xs font-bold text-blue-600">
+          ✦ Pokémon Recommendation
+        </span>
 
-        <div>
-          <h2 className="text-2xl font-bold">
-            {currentPokemon.name}
-          </h2>
+        <div className="mt-5 flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-7">
+          <div className="flex h-44 w-44 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-50 to-pink-100/90">
+            <img
+              src={currentPokemon.image}
+              alt={currentPokemon.name}
+              className="h-36 w-36 object-contain"
+              style={{ imageRendering: "pixelated" }}
+            />
+          </div>
 
-          <p className="mt-2 text-gray-500">
-            ตัวที่ {index + 1} จาก {pokemon.length}
+          <div className="min-w-0 text-center sm:text-left">
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">
+              {currentPokemon.name}
+            </h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              ตัวที่ {index + 1} จาก {pokemon.length}
+            </p>
+            <p className="mt-4 text-sm text-slate-500">
+              Type:{" "}
+              <span className="rounded-full bg-violet-100 px-3 py-1 font-bold text-violet-700">
+                {currentPokemon.type}
+              </span>
+            </p>
+            <Link
+              to={`/pokemon/${currentPokemon.id}`}
+              className="mt-5 inline-flex items-center gap-2 font-bold text-blue-600 hover:underline"
+            >
+              ดูรายละเอียด <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+        </div>
+
+        {showMore && (
+          <p className="mt-5 border-t border-slate-100 pt-4 text-sm leading-6 text-slate-600">
+            {currentPokemon.detail}
           </p>
+        )}
 
-          <p className="text-gray-500">
-            Type: {currentPokemon.type}
-          </p>
-
+        <div className="mt-5 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-4">
           <button
             type="button"
-            onClick={handleMoreClick}
-            className="mt-4 text-blue-600 hover:underline"
+            onClick={() => setShowMore((current) => !current)}
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
           >
-            {showMore ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
+            {showMore ? "ซ่อนคำอธิบาย" : "อ่านคำอธิบาย"}
           </button>
-
-          {showMore && (
-            <p className="mt-3 text-gray-700">
-              {currentPokemon.detail}
-            </p>
-          )}
+          <button
+            type="button"
+            onClick={handleNextClick}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+          >
+            ตัวถัดไป →
+          </button>
         </div>
       </div>
     </div>
