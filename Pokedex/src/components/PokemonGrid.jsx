@@ -1,22 +1,23 @@
 
-import { Link } from "react-router-dom";
 import PokemonCard from "./PokemonCard";
 
-function PokemonGrid({ pokemons }) {
+function PokemonGrid({
+  pokemons,
+  wishlistIds = [],
+  onToggleWishlist,
+}) {
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {pokemons.map((pokemon) => (
-        <Link
+        <PokemonCard
           key={pokemon.id}
-          to={`/pokemon/${pokemon.id}`}
-          className="block rounded-xl transition hover:-translate-y-1"
-        >
-          <PokemonCard
-            name={pokemon.name}
-            type={pokemon.type}
-            image={pokemon.image}
-          />
-        </Link>
+          id={pokemon.id}
+          name={pokemon.name}
+          type={pokemon.type}
+          image={pokemon.image}
+          isWishlisted={wishlistIds.includes(pokemon.id)}
+          onToggleWishlist={onToggleWishlist}
+        />
       ))}
     </div>
   );

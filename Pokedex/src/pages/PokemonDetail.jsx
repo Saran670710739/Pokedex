@@ -1,6 +1,7 @@
 
 import { Link, useParams } from "react-router-dom";
 import pokemon from "../data/pokemon";
+import ReviewForm from "../components/ReviewForm";
 
 function PokemonDetail() {
   const { id } = useParams();
@@ -54,6 +55,10 @@ function PokemonDetail() {
           กลับไปหน้า Pokémon
         </Link>
       </div>
+
+      <section className="mt-8 rounded-xl bg-white p-6 shadow-md">
+        <ReviewForm pokemonName={selectedPokemon.name} />
+      </section>
     </div>
   );
 }
