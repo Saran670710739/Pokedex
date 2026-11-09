@@ -15,6 +15,7 @@ function PokemonGrid({
           name={pokemon.name}
           type={pokemon.type}
           image={pokemon.image}
+          detail={pokemon.detail}
           isWishlisted={wishlistIds.includes(pokemon.id)}
           onToggleWishlist={onToggleWishlist}
         />
