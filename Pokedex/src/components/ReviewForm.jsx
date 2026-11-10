@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getPokemonReviews,
   createPokemonReview,
@@ -13,22 +13,22 @@ function ReviewForm({ pokemonId, pokemonName }) {
   const [status, setStatus] = useState("typing");
   const [loading, setLoading] = useState(true);
 
-  async function loadReviews() {
-    try {
-      const response = await getPokemonReviews(pokemonId);
-      setReviews(response?.data || []);
-    } catch (err) {
-      setError(err.message || "ไม่สามารถโหลดรีวิวได้");
-    } finally {
-      setLoading(false);
-    }
+  const loadReviews = useCallback(async () => {
+  try {
+    const response = await getPokemonReviews(pokemonId);
+    setReviews(response?.data || []);
+  } catch (err) {
+    setError(err.message || "ไม่สามารถโหลดรีวิวได้");
+  } finally {
+    setLoading(false);
   }
+}, [pokemonId]);
 
   useEffect(() => {
-    if (pokemonId) {
-      loadReviews();
-    }
-  }, [pokemonId]);
+  if (pokemonId) {
+    loadReviews();
+  }
+}, [pokemonId, loadReviews]);
 
   async function handleSubmit(e) {
     e.preventDefault();
