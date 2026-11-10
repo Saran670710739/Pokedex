@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -28,10 +27,9 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 
-		// Origin ที่อนุญาต
 		allowedOrigins := map[string]bool{
-			"http://localhost:3000": true,
-			"http://127.0.0.1:3000": true,
+			"http://localhost:3000":                    true,
+			"http://127.0.0.1:3000":                    true,
 			"https://pokedex-saran-supakit.vercel.app": true,
 		}
 
@@ -45,9 +43,16 @@ func corsMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// ตรวจสอบ Origin
 		if origin != "" {
-			if !allowedOrigins[origin] {
+			isAllowed := allowedOrigins[origin]
+
+			// อนุญาต Vercel Preview ของโปรเจกต์ Pokedex
+			if strings.HasPrefix(origin, "https://pokedex-") &&
+				strings.HasSuffix(origin, "-sarans-projects-6ba7b24d.vercel.app") {
+				isAllowed = true
+			}
+
+			if !isAllowed {
 				http.Error(w, "Origin not allowed", http.StatusForbidden)
 				return
 			}
@@ -64,7 +69,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 			)
 		}
 
-		// รองรับ Preflight Request
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -158,25 +162,21 @@ func main() {
 
 	reviewHandler := &handler.ReviewHandler{DB: db}
 
-	// Public: Get Pokemon reviews
 	mux.HandleFunc(
 		"GET /api/pokemon/{pokemon_id}/reviews",
 		reviewHandler.GetPokemonReviews,
 	)
 
-	// Protected: Add review
 	mux.Handle(
 		"POST /api/pokemon/{pokemon_id}/reviews",
 		authHandler.RequireAuth(http.HandlerFunc(reviewHandler.AddReview)),
 	)
 
-	// Protected: Update review
 	mux.Handle(
 		"PUT /api/reviews/{id}",
 		authHandler.RequireAuth(http.HandlerFunc(reviewHandler.UpdateReview)),
 	)
 
-	// Protected: Delete review
 	mux.Handle(
 		"DELETE /api/reviews/{id}",
 		authHandler.RequireAuth(http.HandlerFunc(reviewHandler.DeleteReview)),
@@ -225,7 +225,6 @@ func main() {
 	// =================================
 
 	port := os.Getenv("PORT")
-
 	if port == "" {
 		port = "8080"
 	}
