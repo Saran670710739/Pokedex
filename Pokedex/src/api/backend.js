@@ -178,3 +178,23 @@ export function deletePokemonReview(reviewId) {
     method: "DELETE",
   });
 }
+
+
+// Favorites / Wishlist
+
+export function getFavorites() {
+  return request("/api/favorites");
+}
+
+export function addFavorite(pokemonId) {
+  return request(`/api/favorites/${pokemonId}`, {
+    method: "POST",
+  });
+}
+
+export function removeFavorite(pokemonId) {
+  return request(`/api/favorites/${pokemonId}`, {
+    method: "DELETE",
+  });
+}
+
