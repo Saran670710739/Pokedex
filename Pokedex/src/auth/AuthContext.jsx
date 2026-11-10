@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
   isBackendConfigured,
   getMe,
@@ -18,17 +27,24 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!isBackendConfigured) return;
+
     let ignore = false;
 
     getMe()
       .then((person) => {
-        if (!ignore) setUser(person && person.id ? person : null);
+        if (!ignore) {
+          setUser(person && person.id ? person : null);
+        }
       })
       .catch((error) => {
         if (ignore) return;
+
         setUser(null);
+
         if (error.status !== 401) {
-          setSessionError("ตรวจสอบเซสชันไม่ได้ กรุณาลองใหม่ภายหลัง");
+          setSessionError(
+            "ตรวจสอบเซสชันไม่ได้ กรุณาลองใหม่ภายหลัง"
+          );
         }
       })
       .finally(() => {
@@ -40,35 +56,73 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Login
   const signIn = useCallback(async ({ email, password }) => {
-    await loginUser({ email, password });
-    const person = await getMe();
-    if (!person || !person.id) {
-      throw new Error("Backend ยังไม่ส่งข้อมูลสมาชิกจาก /auth/me");
+    const response = await loginUser({ email, password });
+
+    // Backend ส่งชื่อ access_token
+    const token = response?.access_token;
+
+    if (!token) {
+      throw new Error("Backend ไม่ได้ส่ง Access Token กลับมา");
     }
+
+    // บันทึก Token ก่อนเรียก /api/auth/me
+    localStorage.setItem("token", token);
+
+    if (response.user) {
+      localStorage.setItem(
+        "user",
+        JSON.stringify(response.user)
+      );
+    }
+
+    const person = await getMe(token);
+
+    if (!person || !person.id) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      throw new Error("ไม่สามารถตรวจสอบข้อมูลสมาชิกได้");
+    }
+
     setUser(person);
     setSessionError("");
+
     return person;
   }, []);
 
+  // Register
   const signUp = useCallback(async ({ name, email, password }) => {
     return registerUser({ name, email, password });
   }, []);
 
+  // Logout
   const signOut = useCallback(async () => {
     await logoutUser();
     setUser(null);
   }, []);
 
+  // Update profile
   const saveProfile = useCallback(async ({ name, email }) => {
     const updated = await updateMe({ name, email });
-    if (updated && updated.id) setUser(updated);
+
+    if (updated && updated.id) {
+      setUser(updated);
+    }
+
     return updated;
   }, []);
 
-  const updatePassword = useCallback(async ({ currentPassword, newPassword }) => {
-    return changeMyPassword({ currentPassword, newPassword });
-  }, []);
+  // Change password
+  const updatePassword = useCallback(
+    async ({ currentPassword, newPassword }) => {
+      return changeMyPassword({
+        currentPassword,
+        newPassword,
+      });
+    },
+    []
+  );
 
   const value = useMemo(
     () => ({
@@ -82,14 +136,31 @@ export function AuthProvider({ children }) {
       saveProfile,
       updatePassword,
     }),
-    [user, loading, sessionError, signIn, signUp, signOut, saveProfile, updatePassword]
+    [
+      user,
+      loading,
+      sessionError,
+      signIn,
+      signUp,
+      signOut,
+      saveProfile,
+      updatePassword,
+    ]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth ต้องใช้ภายใน AuthProvider");
+
+  if (!context) {
+    throw new Error("useAuth ต้องใช้ภายใน AuthProvider");
+  }
+
   return context;
 }
