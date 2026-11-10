@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -5,8 +6,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"time"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/Saran670710739/Pokedex/backend/internal/database"
 	"github.com/Saran670710739/Pokedex/backend/internal/handler"
@@ -18,28 +20,66 @@ type HealthResponse struct {
 	Message string `json:"message"`
 }
 
+// =================================
+// CORS Middleware
+// =================================
+
 func corsMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        origin := r.Header.Get("Origin")
-        allowedOrigin := os.Getenv("FRONTEND_URL")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
 
-        if origin == allowedOrigin && allowedOrigin != "" {
-            w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-            w.Header().Set("Vary", "Origin")
-            w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-            w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        }
+		// Origin ที่อนุญาต
+		allowedOrigins := map[string]bool{
+			"http://localhost:3000": true,
+			"http://127.0.0.1:3000": true,
+			"https://pokedex-saran-supakit.vercel.app": true,
+		}
 
-        if r.Method == http.MethodOptions {
-            w.WriteHeader(http.StatusNoContent)
-            return
-        }
+		// รองรับ Origin จาก Environment Variable
+		frontendURLs := strings.Split(os.Getenv("FRONTEND_URL"), ",")
 
-        next.ServeHTTP(w, r)
-    })
+		for _, url := range frontendURLs {
+			url = strings.TrimSpace(url)
+			if url != "" {
+				allowedOrigins[url] = true
+			}
+		}
+
+		// ตรวจสอบ Origin
+		if origin != "" {
+			if !allowedOrigins[origin] {
+				http.Error(w, "Origin not allowed", http.StatusForbidden)
+				return
+			}
+
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set(
+				"Access-Control-Allow-Methods",
+				"GET, POST, PUT, DELETE, OPTIONS",
+			)
+			w.Header().Set(
+				"Access-Control-Allow-Headers",
+				"Content-Type, Authorization",
+			)
+		}
+
+		// รองรับ Preflight Request
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
+// =================================
+// Main
+// =================================
+
 func main() {
+
 	// Load Environment Variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found")
@@ -155,7 +195,10 @@ func main() {
 		})
 	})
 
+	// =================================
 	// Database Health Check
+	// =================================
+
 	mux.HandleFunc("GET /api/health/db", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -177,17 +220,19 @@ func main() {
 		})
 	})
 
+	// =================================
 	// Start Server
-port := os.Getenv("PORT")
+	// =================================
 
-if port == "" {
-    port = "8080"
-}
+	port := os.Getenv("PORT")
 
-log.Printf("Pokedex Backend running on port %s", port)
+	if port == "" {
+		port = "8080"
+	}
 
-if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
-    log.Fatal(err)
-}
+	log.Printf("Pokedex Backend running on port %s", port)
 
+	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
+		log.Fatal(err)
+	}
 }
