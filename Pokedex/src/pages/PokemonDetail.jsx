@@ -456,7 +456,11 @@ function PokemonDetail({ wishlistIds = [], onToggleWishlist }) {
 
         <section className="mt-10 rounded-[30px] border border-white/75 bg-white/75 p-6 shadow-sm sm:p-8">
           <h2 className="mb-4 text-xl font-extrabold sm:text-2xl">Community Reviews</h2>
-          <ReviewForm key={pokemon.id} pokemonName={pokemon.name} />
+          <ReviewForm
+  key={pokemon.id}
+  pokemonId={pokemon.id}
+  pokemonName={pokemon.name}
+/>
         </section>
       </div>
     </div>

@@ -1,9 +1,10 @@
 
 import { onceADay, forget } from "./cache";
 
-// Go Backend บน Render
+// Go Backend บน GitHub Codespaces
 const BASE_URL = (
-  process.env.REACT_APP_API_URL || "https://pokedex-backend-2ar0.onrender.com"
+  process.env.REACT_APP_API_URL ||
+  "https://fictional-space-cod-5g5gx69v7xvphv54x-8080.app.github.dev"
 ).replace(/\/+$/, "");
 
 const LIST_CACHE_KEY = "pokemonhub-api-list-v3";

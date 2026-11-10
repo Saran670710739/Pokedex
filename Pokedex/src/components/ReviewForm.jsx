@@ -1,83 +1,195 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  getPokemonReviews,
+  createPokemonReview,
+} from "../api/backend";
 
-function ReviewForm({ pokemonName }) {
+function ReviewForm({ pokemonId, pokemonName }) {
   const [review, setReview] = useState("");
-  const [error, setError] = useState(null);
+  const [rating, setRating] = useState(5);
+  const [reviews, setReviews] = useState([]);
+  const [error, setError] = useState("");
   const [status, setStatus] = useState("typing");
+  const [loading, setLoading] = useState(true);
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError(null);
-    setStatus("submitting");
-
+  async function loadReviews() {
     try {
-      await submitReview(review);
-      setStatus("success");
+      const response = await getPokemonReviews(pokemonId);
+      setReviews(response?.data || []);
     } catch (err) {
-      setStatus("typing");
-      setError(err);
+      setError(err.message || "ไม่สามารถโหลดรีวิวได้");
+    } finally {
+      setLoading(false);
     }
   }
 
-  if (status === "success") {
-    return (
-      <p className="font-semibold text-green-600">
-        ขอบคุณสำหรับรีวิว {pokemonName} 🎉
-      </p>
-    );
+  useEffect(() => {
+    if (pokemonId) {
+      loadReviews();
+    }
+  }, [pokemonId]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setError("กรุณาเข้าสู่ระบบก่อนเขียนรีวิว");
+      return;
+    }
+
+    if (review.trim().length < 10) {
+      setError("รีวิวสั้นเกินไป ลองเขียนอย่างน้อย 10 ตัวอักษร");
+      return;
+    }
+
+    setError("");
+    setStatus("submitting");
+
+    try {
+      await createPokemonReview(
+        pokemonId,
+        rating,
+        review.trim()
+      );
+
+      setReview("");
+      setRating(5);
+      setStatus("success");
+
+      setLoading(true);
+      await loadReviews();
+    } catch (err) {
+      setStatus("typing");
+
+      if (err.status === 409) {
+        setError("คุณเคยรีวิว Pokémon ตัวนี้แล้ว");
+      } else {
+        setError(err.message || "ส่งรีวิวไม่สำเร็จ");
+      }
+    }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <section className="space-y-5">
       <h3 className="text-xl font-bold">
         รีวิว {pokemonName}
       </h3>
 
-      <textarea
-        value={review}
-        onChange={(e) => {
-          setReview(e.target.value);
-          setError(null);
-        }}
-        disabled={status === "submitting"}
-        placeholder="คุณคิดอย่างไรกับ Pokémon ตัวนี้..."
-        rows={4}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
-      />
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="block font-medium mb-2">
+            คะแนนของคุณ
+          </label>
 
-      <button
-        type="submit"
-        disabled={
-          review.trim().length === 0 ||
-          status === "submitting"
-        }
-        className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-      >
-        {status === "submitting"
-          ? "กำลังส่ง..."
-          : "ส่งรีวิว"}
-      </button>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                onClick={() => setRating(star)}
+                disabled={status === "submitting"}
+                className={`text-2xl ${
+                  star <= rating
+                    ? "text-yellow-400"
+                    : "text-gray-300"
+                }`}
+                aria-label={`${star} ดาว`}
+              >
+                ★
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {error !== null && (
-        <p className="text-sm text-red-500">
-          {error.message}
+        <textarea
+          value={review}
+          onChange={(e) => {
+            setReview(e.target.value);
+            setError("");
+            setStatus("typing");
+          }}
+          disabled={status === "submitting"}
+          placeholder="คุณคิดอย่างไรกับ Pokémon ตัวนี้..."
+          rows={4}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
+        />
+
+        <button
+          type="submit"
+          disabled={
+            review.trim().length === 0 ||
+            status === "submitting"
+          }
+          className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+        >
+          {status === "submitting"
+            ? "กำลังส่ง..."
+            : "ส่งรีวิว"}
+        </button>
+      </form>
+
+      {error && (
+        <p role="alert" className="text-sm text-red-500">
+          {error}
         </p>
       )}
-    </form>
-  );
-}
 
-function submitReview(text) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (text.trim().length < 10) {
-        reject(new Error("รีวิวสั้นเกินไป ลองเขียนอีกนิด"));
-      } else {
-        resolve();
-      }
-    }, 1500);
-  });
+      {status === "success" && (
+        <p className="font-semibold text-green-600">
+          ขอบคุณสำหรับรีวิว {pokemonName} 🎉
+        </p>
+      )}
+
+      <div className="space-y-3">
+        <h4 className="font-bold">
+          รีวิวจากผู้ใช้งาน ({reviews.length})
+        </h4>
+
+        {loading ? (
+          <p className="text-gray-500">
+            กำลังโหลดรีวิว...
+          </p>
+        ) : reviews.length === 0 ? (
+          <p className="text-gray-500">
+            ยังไม่มีรีวิวสำหรับ Pokémon ตัวนี้
+          </p>
+        ) : (
+          reviews.map((item) => (
+            <article
+              key={item.id}
+              className="rounded-xl border border-gray-200 p-4"
+            >
+              <div className="flex items-center justify-between">
+                <p className="font-semibold">
+                  สมาชิก #{item.user_id}
+                </p>
+
+                <p className="text-yellow-500">
+                  {"★".repeat(item.rating)}
+                  <span className="text-gray-300">
+                    {"★".repeat(5 - item.rating)}
+                  </span>
+                </p>
+              </div>
+
+              <p className="mt-2 whitespace-pre-wrap text-sm">
+                {item.comment}
+              </p>
+
+              <p className="mt-2 text-xs text-gray-400">
+                {item.created_at
+                  ? new Date(item.created_at).toLocaleDateString("th-TH")
+                  : ""}
+              </p>
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  );
 }
 
 export default ReviewForm;

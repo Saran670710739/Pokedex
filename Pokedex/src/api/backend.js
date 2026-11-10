@@ -1,5 +1,8 @@
 
-const BASE_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/+$/, "");
+const BASE_URL = (
+  process.env.REACT_APP_BACKEND_URL ||
+  "https://pokedex-backend-2ar0.onrender.com"
+).replace(/\/+$/, "");
 
 export const isBackendConfigured = Boolean(BASE_URL);
 
@@ -12,7 +15,7 @@ export class ApiError extends Error {
 }
 
 async function request(path, { method = "GET", body, token } = {}) {
-  if (!isBackendConfigured) {
+  if (!BASE_URL) {
     throw new ApiError("ยังไม่ได้ตั้งค่า Backend URL", 0);
   }
 
@@ -22,18 +25,28 @@ async function request(path, { method = "GET", body, token } = {}) {
     headers["Content-Type"] = "application/json";
   }
 
-  // ใช้ Token ที่ส่งมา หรือดึงจาก localStorage อัตโนมัติ
   const authToken = token || localStorage.getItem("token");
 
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  let response;
+
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers,
+      ...(body === undefined
+        ? {}
+        : { body: JSON.stringify(body) }),
+    });
+  } catch (error) {
+    throw new ApiError(
+      "ไม่สามารถเชื่อมต่อ Backend ได้ กรุณาตรวจสอบ URL และ CORS",
+      0
+    );
+  }
 
   const contentType = response.headers.get("content-type") || "";
   let payload = null;
@@ -53,6 +66,7 @@ async function request(path, { method = "GET", body, token } = {}) {
       (typeof payload === "object" &&
         payload &&
         (payload.message || payload.error)) ||
+      (typeof payload === "string" && payload) ||
       `การเชื่อมต่อไม่สำเร็จ (HTTP ${response.status})`;
 
     throw new ApiError(String(message), response.status);
@@ -92,7 +106,7 @@ export function registerUser(details) {
   });
 }
 
-// Logout: ลบ Token และข้อมูลผู้ใช้ออกจาก Browser
+// Logout
 
 export function logoutUser() {
   localStorage.removeItem("token");
@@ -104,8 +118,7 @@ export function logoutUser() {
 }
 
 // Profile
-// หมายเหตุ: Go Backend ยังไม่มี API /api/users/me
-// ฟังก์ชันนี้จึงยังไม่สามารถแก้ไข Profile จริงได้
+// Go Backend ปัจจุบันยังไม่มี API เหล่านี้
 
 export async function updateMe(details) {
   return unwrapUser(
@@ -123,10 +136,45 @@ export function changeMyPassword(details) {
   });
 }
 
+// Admin
+// ต้องเพิ่ม Routes ใน Go Backend ก่อนจึงจะใช้งานได้
+
 export function getAdminSummary() {
   return request("/api/admin/summary");
 }
 
 export function getAdminUsers() {
   return request("/api/admin/users");
+}
+
+// Reviews
+
+export function getPokemonReviews(pokemonId) {
+  return request(`/api/pokemon/${pokemonId}/reviews`);
+}
+
+export function createPokemonReview(pokemonId, rating, comment) {
+  return request(`/api/pokemon/${pokemonId}/reviews`, {
+    method: "POST",
+    body: {
+      rating,
+      comment,
+    },
+  });
+}
+
+export function updatePokemonReview(reviewId, rating, comment) {
+  return request(`/api/reviews/${reviewId}`, {
+    method: "PUT",
+    body: {
+      rating,
+      comment,
+    },
+  });
+}
+
+export function deletePokemonReview(reviewId) {
+  return request(`/api/reviews/${reviewId}`, {
+    method: "DELETE",
+  });
 }

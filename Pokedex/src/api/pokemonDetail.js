@@ -1,202 +1,158 @@
+
 import { getPokemonJSON } from "./pokemon";
 import { onceADay, forget } from "./cache";
 
-// ใช้ .env ตัวเดิมของ Create React App ไม่ต้องเพิ่มตัวแปรใหม่
-const BASE_URL = (
-  process.env.REACT_APP_POKEAPI_BASE_URL || "https://pokeapi.co/api/v2"
-).replace(/\/+$/, "");
-
-const CACHE_PREFIX = "pokemonhub-rich-detail-v1-";
-
-// ชื่อธาตุมาตรฐานสำหรับคำนวณการโจมตีที่ได้รับ
-const ATTACK_TYPES = [
-  "normal", "fire", "water", "electric", "grass", "ice", "fighting",
-  "poison", "ground", "flying", "psychic", "bug", "rock", "ghost",
-  "dragon", "dark", "steel", "fairy",
-];
+const CACHE_PREFIX = "pokemonhub-rich-detail-v3-";
 
 const STAT_LABELS = {
   hp: "HP",
   attack: "Attack",
   defense: "Defense",
-  "special-attack": "Sp. Attack",
-  "special-defense": "Sp. Defense",
+  "special-attack": "Sp. Atk",
+  "special-defense": "Sp. Def",
   speed: "Speed",
 };
 
-const prettify = (value = "") =>
-  value
+function prettify(value = "") {
+  return String(value)
     .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-
-async function getJSON(url) {
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`โหลดข้อมูลไม่สำเร็จ (HTTP ${response.status})`);
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("json")) {
-    throw new Error(`API ส่งข้อมูลไม่ใช่ JSON กรุณาตรวจ REACT_APP_POKEAPI_BASE_URL`);
-  }
-
-  return response.json();
 }
 
+// คำนวณ Max Stats ที่ Level 100 (IV 31 / EV 252 / Nature +10%)
 function calculateMaxStat(name, base) {
-  // เลเวล 100 / IV 31 / EV 252 / Nature เพิ่มค่านั้น 10%
-  // ตัวเลขแต่ละสเตตัสคือเพดานรายค่า ไม่สามารถได้ทุกค่าพร้อมกัน
   if (name === "hp") {
-    return base === 1 ? 1 : 2 * base + 31 + 63 + 110;
+    return Math.floor(2 * base + 31 + 63 + 100 + 10);
   }
+
   return Math.floor((2 * base + 31 + 63 + 5) * 1.1);
 }
 
-function calculateDefense(typeResources) {
-  if (!typeResources.length) return null;
+// แปลงข้อมูลแพ้ทางและต้านทาน
+function calculateDefense(data) {
+  const weaknesses = data.weaknesses || [];
+  const resistances = data.resistances || [];
 
-  return ATTACK_TYPES.map((attackType) => {
-    const multiplier = typeResources.reduce((value, typeData) => {
-      const relations = typeData.damage_relations;
-      if (relations.no_damage_from.some((item) => item.name === attackType)) {
-        return value * 0;
-      }
-      if (relations.double_damage_from.some((item) => item.name === attackType)) {
-        return value * 2;
-      }
-      if (relations.half_damage_from.some((item) => item.name === attackType)) {
-        return value * 0.5;
-      }
-      return value;
-    }, 1);
-
-    return { name: prettify(attackType), multiplier };
-  });
+  return [
+    ...weaknesses.map((item) => ({
+      name: prettify(item.type),
+      multiplier: item.multiplier,
+    })),
+    ...resistances.map((item) => ({
+      name: prettify(item.type),
+      multiplier: item.multiplier,
+    })),
+  ];
 }
 
-function getEvolutionHint(chain, speciesName) {
-  if (!chain) return "ไม่มีข้อมูล";
-
-  function findStage(stage) {
-    if (stage.species?.name === speciesName) return stage;
-    for (const branch of stage.evolves_to || []) {
-      const found = findStage(branch);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  const current = findStage(chain.chain);
-  if (!current) return "ไม่มีข้อมูล";
-  const next = current.evolves_to?.[0];
-  if (!next) return "ร่างสุดท้าย";
-
-  const level = next.evolution_details?.[0]?.min_level;
-  return level
-    ? `Lv. ${level} → ${prettify(next.species.name)}`
-    : `→ ${prettify(next.species.name)}`;
-}
-
-function collectMoves(rawMoves) {
+// แปลงข้อมูล Moves
+function collectMoves(rawMoves = []) {
   const levelUp = [];
   const others = [];
 
-  for (const item of rawMoves || []) {
-    const details = item.version_group_details || [];
-    const levelEntries = details.filter(
-      (detail) => detail.move_learn_method?.name === "level-up"
-    );
+  for (const move of rawMoves) {
+    const name = prettify(move.name);
 
-    if (levelEntries.length) {
+    if (move.learn_method === "level-up") {
       levelUp.push({
-        name: prettify(item.move.name),
-        level: Math.min(...levelEntries.map((entry) => entry.level_learned_at)),
+        name,
+        level: move.level_learned_at ?? 0,
       });
     } else {
-      const method = details[0]?.move_learn_method?.name || "other";
-      others.push({ name: prettify(item.move.name), method: prettify(method) });
+      others.push({
+        name,
+        method: prettify(move.learn_method || "other"),
+      });
     }
   }
 
-  levelUp.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-  others.sort((a, b) => a.name.localeCompare(b.name));
   return { levelUp, others };
 }
 
-export function getPokemonRichDetail(id) {
-  const numericId = Number(id);
-  if (!Number.isSafeInteger(numericId) || numericId < 1) {
-    return Promise.reject(new Error("หมายเลข Pokémon ไม่ถูกต้อง"));
+// แปลงข้อความ Evolution
+function getEvolutionHint(evolutions = []) {
+  if (!evolutions.length) {
+    return "ไม่มีวิวัฒนาการเพิ่มเติม";
   }
 
-  return onceADay(`${CACHE_PREFIX}${numericId}`, async () => {
-    // ตัวหลักต้องโหลดสำเร็จ ส่วน species/type เป็นข้อมูลเพิ่มเติม
-    const raw = await getPokemonJSON(numericId);
-    const names = raw.types.map(({ type }) => type.name);
+  return evolutions.map((item) => {
+    const name = prettify(item.name);
 
-    const [species, typeResults] = await Promise.all([
-      getJSON(`${BASE_URL}/pokemon-species/${raw.species?.name || numericId}`)
-        .catch(() => null),
-      Promise.all(
-        names.map((name) => getJSON(`${BASE_URL}/type/${name}`).catch(() => null))
-      ),
-    ]);
+    if (item.trigger === "use-item") {
+      return `${name} (ใช้ ${prettify(item.item_name || "Item")})`;
+    }
 
-    const chain = species?.evolution_chain?.url
-      ? await getJSON(species.evolution_chain.url).catch(() => null)
-      : null;
+    if (item.min_level) {
+      return `${name} (Level ${item.min_level})`;
+    }
 
-    const englishDescriptions = (species?.flavor_text_entries || []).filter(
-      (entry) => entry.language.name === "en"
-    );
-    const description = englishDescriptions.length
-      ? englishDescriptions[englishDescriptions.length - 1].flavor_text
-          .replace(/[\f\n\r]/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-      : "Explore this Pokémon's information, base stats, and abilities.";
-
-    const moves = collectMoves(raw.moves);
-
-    return {
-      id: raw.id,
-      name: prettify(raw.name),
-      types: names.map(prettify),
-      artwork:
-        raw.sprites?.other?.["official-artwork"]?.front_default ||
-        raw.sprites?.front_default || "",
-      shinyArtwork:
-        raw.sprites?.other?.["official-artwork"]?.front_shiny ||
-        raw.sprites?.front_shiny || "",
-      height: (raw.height / 10).toFixed(1),
-      weight: (raw.weight / 10).toFixed(1),
-      genus: species?.genera?.find((item) => item.language.name === "en")?.genus || "Pokémon",
-      description,
-      evolution: getEvolutionHint(chain, raw.species?.name),
-      stats: raw.stats.map(({ stat, base_stat }) => ({
-        key: stat.name,
-        name: STAT_LABELS[stat.name] || prettify(stat.name),
-        base: base_stat,
-        max: calculateMaxStat(stat.name, base_stat),
-      })),
-      defense: calculateDefense(typeResults.filter(Boolean)),
-      abilities: raw.abilities.map(({ ability, is_hidden }) => ({
-        name: prettify(ability.name),
-        hidden: is_hidden,
-      })),
-      breeding: {
-        eggGroups: (species?.egg_groups || []).map((group) => prettify(group.name)),
-        captureRate: species?.capture_rate ?? null,
-        hatchCounter: species?.hatch_counter ?? null,
-        genderRate: species?.gender_rate ?? null,
-      },
-      moves,
-    };
-  });
+    return name;
+  }).join(", ");
 }
 
+// โหลดรายละเอียดจาก Go Backend + Supabase
+export async function getPokemonRichDetail(id) {
+  const numericId = Number(id);
+
+  if (!Number.isSafeInteger(numericId) || numericId < 1) {
+    throw new Error("หมายเลข Pokémon ไม่ถูกต้อง");
+  }
+
+  return onceADay(
+    `${CACHE_PREFIX}${numericId}`,
+    async () => {
+      const raw = await getPokemonJSON(numericId);
+
+      const stats = (raw.stats || []).map((item) => ({
+        key: item.name,
+        name: STAT_LABELS[item.name] || prettify(item.name),
+        base: item.value,
+        max: calculateMaxStat(item.name, item.value),
+      }));
+
+      const abilities = (raw.abilities || []).map((item) => ({
+        name: prettify(item.name),
+        hidden: item.is_hidden,
+        description: item.description || "",
+      }));
+
+      const moves = collectMoves(raw.moves || []);
+
+      return {
+        id: raw.id,
+        name: prettify(raw.name),
+        types: (raw.types || []).map(prettify),
+
+        artwork: raw.artwork_url || "",
+        shinyArtwork: raw.shiny_artwork_url || "",
+
+        height: raw.height ?? 0,
+        weight: raw.weight ?? 0,
+
+        genus: raw.genus || "Pokémon",
+        description: raw.description || "ไม่มีคำอธิบาย",
+
+        evolution: getEvolutionHint(raw.evolutions),
+
+        stats,
+        defense: calculateDefense(raw),
+        abilities,
+
+        breeding: {
+          eggGroups: (raw.egg_groups || []).map(prettify),
+          captureRate: raw.capture_rate ?? null,
+          hatchCounter: raw.hatch_counter ?? null,
+          genderRate: raw.gender_rate ?? null,
+        },
+
+        moves,
+      };
+    }
+  );
+}
+
+// ล้าง Cache
 export function clearPokemonRichDetailCache(id) {
   forget(`${CACHE_PREFIX}${Number(id)}`);
 }
