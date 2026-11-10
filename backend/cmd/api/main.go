@@ -131,6 +131,26 @@ func main() {
 	)
 
 	// =================================
+	// Admin API
+	// =================================
+
+	adminHandler := &handler.AdminHandler{DB: db}
+
+	mux.Handle(
+		"GET /api/admin/summary",
+		authHandler.RequireAdmin(
+			http.HandlerFunc(adminHandler.GetSummary),
+		),
+	)
+
+	mux.Handle(
+		"GET /api/admin/users",
+		authHandler.RequireAdmin(
+			http.HandlerFunc(adminHandler.GetUsers),
+		),
+	)
+
+	// =================================
 	// Favorites API
 	// =================================
 
