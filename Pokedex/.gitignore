@@ -1,33 +1,39 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.js
 
-# testing
+# Testing
 /coverage
 
-# production
+# Production
 /build
+/dist
 
-# misc
+# Misc
 .DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
 # Environment variables
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Keep example environment file
+.env.*
 !.env.example
+
+# Go
+/backend/bin/
+/backend/vendor/
+/backend/tmp/
+
+# IDE and editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# Operating system
+Thumbs.db
+Desktop.ini

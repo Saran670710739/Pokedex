@@ -1,0 +1,9 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Go
+/backend/bin/
+/backend/vendor/
+/backend/tmp/
