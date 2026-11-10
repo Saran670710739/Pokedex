@@ -22,8 +22,11 @@ async function request(path, { method = "GET", body, token } = {}) {
     headers["Content-Type"] = "application/json";
   }
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  // ใช้ Token ที่ส่งมา หรือดึงจาก localStorage อัตโนมัติ
+  const authToken = token || localStorage.getItem("token");
+
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
   }
 
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -59,11 +62,20 @@ async function request(path, { method = "GET", body, token } = {}) {
 }
 
 function unwrapUser(response) {
-  return response?.user || response?.data?.user || response?.data || response;
+  return (
+    response?.user ||
+    response?.data?.user ||
+    response?.data ||
+    response
+  );
 }
 
+// Authentication
+
 export async function getMe(token) {
-  return unwrapUser(await request("/api/auth/me", { token }));
+  return unwrapUser(
+    await request("/api/auth/me", { token })
+  );
 }
 
 export function loginUser(credentials) {
@@ -78,11 +90,43 @@ export function registerUser(details) {
     method: "POST",
     body: details,
   });
-  
 }
+
+// Logout: ลบ Token และข้อมูลผู้ใช้ออกจาก Browser
 
 export function logoutUser() {
   localStorage.removeItem("token");
   localStorage.removeItem("user");
-  return Promise.resolve({ message: "Logged out successfully" });
+
+  return Promise.resolve({
+    message: "Logged out successfully",
+  });
+}
+
+// Profile
+// หมายเหตุ: Go Backend ยังไม่มี API /api/users/me
+// ฟังก์ชันนี้จึงยังไม่สามารถแก้ไข Profile จริงได้
+
+export async function updateMe(details) {
+  return unwrapUser(
+    await request("/api/users/me", {
+      method: "PATCH",
+      body: details,
+    })
+  );
+}
+
+export function changeMyPassword(details) {
+  return request("/api/users/me/password", {
+    method: "PATCH",
+    body: details,
+  });
+}
+
+export function getAdminSummary() {
+  return request("/api/admin/summary");
+}
+
+export function getAdminUsers() {
+  return request("/api/admin/users");
 }
