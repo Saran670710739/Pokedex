@@ -78,4 +78,11 @@ export function registerUser(details) {
     method: "POST",
     body: details,
   });
+  
+}
+
+export function logoutUser() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  return Promise.resolve({ message: "Logged out successfully" });
 }
