@@ -34,7 +34,7 @@ type PokemonListResponse struct {
 }
 
 func (h *PokemonHandler) GetPokemon(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10_000_000_000)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -58,61 +58,63 @@ func (h *PokemonHandler) GetPokemon(w http.ResponseWriter, r *http.Request) {
 	var total int
 
 	err := h.DB.QueryRow(ctx, `
-    SELECT COUNT(*)
-    FROM pokemons p
-    WHERE (
-        $1 = ''
-        OR p.name ILIKE '%' || $1 || '%'
-        OR p.id::text = $1
-    )
-    AND (
-        $2 = ''
-        OR EXISTS (
-            SELECT 1
-            FROM pokemon_types pt
-            WHERE pt.pokemon_id = p.id
-            AND LOWER(pt.type_name) = LOWER($2)
-        )
-    )
-`, search, typeName).Scan(&total)
+		SELECT COUNT(*)
+		FROM pokemons p
+		WHERE (
+			$1 = ''
+			OR p.name ILIKE '%' || $1 || '%'
+			OR p.id::text = $1
+		)
+		AND (
+			$2 = ''
+			OR EXISTS (
+				SELECT 1
+				FROM pokemon_types pt
+				WHERE pt.pokemon_id = p.id
+				AND LOWER(pt.type_name) = LOWER($2)
+			)
+		)
+	`, search, typeName).Scan(&total)
 
 	if err != nil {
+		log.Printf("GetPokemon count error: %v", err)
 		http.Error(w, `{"error":"Failed to count Pokemon"}`, http.StatusInternalServerError)
 		return
 	}
 
 	rows, err := h.DB.Query(ctx, `
-    SELECT
-        p.id,
-        p.name,
-        p.artwork_url,
-        COALESCE(
-            ARRAY_AGG(pt.type_name ORDER BY pt.slot)
-            FILTER (WHERE pt.type_name IS NOT NULL),
-            ARRAY[]::text[]
-        ) AS types
-    FROM pokemons p
-    LEFT JOIN pokemon_types pt ON pt.pokemon_id = p.id
-    WHERE (
-        $1 = ''
-        OR p.name ILIKE '%' || $1 || '%'
-        OR p.id::text = $1
-    )
-    AND (
-        $2 = ''
-        OR EXISTS (
-            SELECT 1
-            FROM pokemon_types filter_pt
-            WHERE filter_pt.pokemon_id = p.id
-            AND LOWER(filter_pt.type_name) = LOWER($2)
-        )
-    )
-    GROUP BY p.id, p.name, p.artwork_url
-    ORDER BY p.id
-    LIMIT $3 OFFSET $4
-`, search, typeName, limit, offset)
+		SELECT
+			p.id,
+			p.name,
+			p.artwork_url,
+			COALESCE(
+				ARRAY_AGG(pt.type_name ORDER BY pt.slot)
+				FILTER (WHERE pt.type_name IS NOT NULL),
+				ARRAY[]::text[]
+			) AS types
+		FROM pokemons p
+		LEFT JOIN pokemon_types pt ON pt.pokemon_id = p.id
+		WHERE (
+			$1 = ''
+			OR p.name ILIKE '%' || $1 || '%'
+			OR p.id::text = $1
+		)
+		AND (
+			$2 = ''
+			OR EXISTS (
+				SELECT 1
+				FROM pokemon_types filter_pt
+				WHERE filter_pt.pokemon_id = p.id
+				AND LOWER(filter_pt.type_name) = LOWER($2)
+			)
+		)
+		GROUP BY p.id, p.name, p.artwork_url
+		ORDER BY p.id
+		LIMIT $3 OFFSET $4
+	`, search, typeName, limit, offset)
 
 	if err != nil {
+		log.Printf("GetPokemon query error: %v", err)
 		http.Error(w, `{"error":"Failed to get Pokemon"}`, http.StatusInternalServerError)
 		return
 	}
@@ -129,6 +131,7 @@ func (h *PokemonHandler) GetPokemon(w http.ResponseWriter, r *http.Request) {
 			&pokemon.ArtworkURL,
 			&pokemon.Types,
 		); err != nil {
+			log.Printf("GetPokemon scan error: %v", err)
 			http.Error(w, `{"error":"Failed to read Pokemon"}`, http.StatusInternalServerError)
 			return
 		}
@@ -137,6 +140,7 @@ func (h *PokemonHandler) GetPokemon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
+		log.Printf("GetPokemon rows error: %v", err)
 		http.Error(w, `{"error":"Failed to read Pokemon rows"}`, http.StatusInternalServerError)
 		return
 	}
@@ -229,16 +233,21 @@ func (h *PokemonHandler) GetPokemonDetail(w http.ResponseWriter, r *http.Request
 		Resistances: []TypeMatchup{},
 	}
 
-	// 1. ข้อมูลพื้นฐาน
+	// 1. Basic information
 	err = h.DB.QueryRow(ctx, `
 		SELECT id, name, genus, description, height, weight,
 		       artwork_url, shiny_artwork_url
 		FROM pokemons
 		WHERE id = $1
 	`, id).Scan(
-		&result.ID, &result.Name, &result.Genus,
-		&result.Description, &result.Height, &result.Weight,
-		&result.ArtworkURL, &result.ShinyArtworkURL,
+		&result.ID,
+		&result.Name,
+		&result.Genus,
+		&result.Description,
+		&result.Height,
+		&result.Weight,
+		&result.ArtworkURL,
+		&result.ShinyArtworkURL,
 	)
 
 	if err != nil {
@@ -255,24 +264,34 @@ func (h *PokemonHandler) GetPokemonDetail(w http.ResponseWriter, r *http.Request
 
 	// 2. Types
 	rows, err := h.DB.Query(ctx, `
-		SELECT type_name FROM pokemon_types
-		WHERE pokemon_id = $1 ORDER BY slot
+		SELECT type_name
+		FROM pokemon_types
+		WHERE pokemon_id = $1
+		ORDER BY slot
 	`, id)
+
 	if err != nil {
+		log.Printf("GetPokemonDetail types query error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to get types"}`, 500)
 		return
 	}
+
 	for rows.Next() {
 		var name string
+
 		if err := rows.Scan(&name); err != nil {
 			rows.Close()
+			log.Printf("GetPokemonDetail types scan error (ID %d): %v", id, err)
 			http.Error(w, `{"error":"Failed to read types"}`, 500)
 			return
 		}
+
 		result.Types = append(result.Types, name)
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("GetPokemonDetail types rows error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to read types"}`, 500)
 		return
 	}
@@ -284,30 +303,38 @@ func (h *PokemonHandler) GetPokemonDetail(w http.ResponseWriter, r *http.Request
 		FROM pokemon_stats
 		WHERE pokemon_id = $1
 		ORDER BY CASE stat_name
-    WHEN 'hp' THEN 1
-    WHEN 'attack' THEN 2
-    WHEN 'defense' THEN 3
-    WHEN 'special-attack' THEN 4
-    WHEN 'special-defense' THEN 5
-    WHEN 'speed' THEN 6
-    ELSE 7
-END
+			WHEN 'hp' THEN 1
+			WHEN 'attack' THEN 2
+			WHEN 'defense' THEN 3
+			WHEN 'special-attack' THEN 4
+			WHEN 'special-defense' THEN 5
+			WHEN 'speed' THEN 6
+			ELSE 7
+		END
 	`, id)
+
 	if err != nil {
+		log.Printf("GetPokemonDetail stats query error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to get stats"}`, 500)
 		return
 	}
+
 	for rows.Next() {
 		var item PokemonStat
+
 		if err := rows.Scan(&item.Name, &item.Value); err != nil {
 			rows.Close()
+			log.Printf("GetPokemonDetail stats scan error (ID %d): %v", id, err)
 			http.Error(w, `{"error":"Failed to read stats"}`, 500)
 			return
 		}
+
 		result.Stats = append(result.Stats, item)
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("GetPokemonDetail stats rows error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to read stats"}`, 500)
 		return
 	}
@@ -321,21 +348,29 @@ END
 		WHERE pa.pokemon_id = $1
 		ORDER BY pa.slot
 	`, id)
+
 	if err != nil {
+		log.Printf("GetPokemonDetail abilities query error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to get abilities"}`, 500)
 		return
 	}
+
 	for rows.Next() {
 		var item PokemonAbility
+
 		if err := rows.Scan(&item.Name, &item.Description, &item.IsHidden); err != nil {
 			rows.Close()
+			log.Printf("GetPokemonDetail abilities scan error (ID %d): %v", id, err)
 			http.Error(w, `{"error":"Failed to read abilities"}`, 500)
 			return
 		}
+
 		result.Abilities = append(result.Abilities, item)
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("GetPokemonDetail abilities rows error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to read abilities"}`, 500)
 		return
 	}
@@ -350,25 +385,38 @@ END
 		WHERE pm.pokemon_id = $1
 		ORDER BY pm.level_learned_at, m.name
 	`, id)
+
 	if err != nil {
+		log.Printf("GetPokemonDetail moves query error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to get moves"}`, 500)
 		return
 	}
+
 	for rows.Next() {
 		var item PokemonMove
+
 		if err := rows.Scan(
-			&item.Name, &item.Type, &item.Power, &item.Accuracy,
-			&item.PP, &item.DamageClass, &item.LearnMethod,
+			&item.Name,
+			&item.Type,
+			&item.Power,
+			&item.Accuracy,
+			&item.PP,
+			&item.DamageClass,
+			&item.LearnMethod,
 			&item.LevelLearnedAt,
 		); err != nil {
 			rows.Close()
+			log.Printf("GetPokemonDetail moves scan error (ID %d): %v", id, err)
 			http.Error(w, `{"error":"Failed to read moves"}`, 500)
 			return
 		}
+
 		result.Moves = append(result.Moves, item)
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("GetPokemonDetail moves rows error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to read moves"}`, 500)
 		return
 	}
@@ -376,31 +424,40 @@ END
 
 	// 6. Egg Groups
 	rows, err = h.DB.Query(ctx, `
-		SELECT egg_group FROM pokemon_egg_groups
+		SELECT egg_group
+		FROM pokemon_egg_groups
 		WHERE pokemon_id = $1
 		ORDER BY egg_group
 	`, id)
+
 	if err != nil {
+		log.Printf("GetPokemonDetail egg groups query error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to get egg groups"}`, 500)
 		return
 	}
+
 	for rows.Next() {
 		var group string
+
 		if err := rows.Scan(&group); err != nil {
 			rows.Close()
+			log.Printf("GetPokemonDetail egg groups scan error (ID %d): %v", id, err)
 			http.Error(w, `{"error":"Failed to read egg groups"}`, 500)
 			return
 		}
+
 		result.EggGroups = append(result.EggGroups, group)
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("GetPokemonDetail egg groups rows error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to read egg groups"}`, 500)
 		return
 	}
 	rows.Close()
 
-	// 7. Evolution
+	// 7. Evolutions
 	rows, err = h.DB.Query(ctx, `
 		SELECT p.id, p.name, p.artwork_url,
 		       e.trigger_name, e.min_level, e.item_name
@@ -409,52 +466,73 @@ END
 		WHERE e.from_pokemon_id = $1
 		ORDER BY p.id
 	`, id)
+
 	if err != nil {
+		log.Printf("GetPokemonDetail evolutions query error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to get evolutions"}`, 500)
 		return
 	}
+
 	for rows.Next() {
 		var item PokemonEvolution
+
 		if err := rows.Scan(
-			&item.ID, &item.Name, &item.ArtworkURL,
-			&item.Trigger, &item.MinLevel, &item.ItemName,
+			&item.ID,
+			&item.Name,
+			&item.ArtworkURL,
+			&item.Trigger,
+			&item.MinLevel,
+			&item.ItemName,
 		); err != nil {
 			rows.Close()
+			log.Printf("GetPokemonDetail evolutions scan error (ID %d): %v", id, err)
 			http.Error(w, `{"error":"Failed to read evolutions"}`, 500)
 			return
 		}
+
 		result.Evolutions = append(result.Evolutions, item)
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("GetPokemonDetail evolutions rows error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to read evolutions"}`, 500)
 		return
 	}
 	rows.Close()
 
-	// 8. Weaknesses และ Resistances
+	// 8. Weaknesses and Resistances
 	rows, err = h.DB.Query(ctx, `
 		SELECT
-    te.attack_type,
-    CASE
-        WHEN BOOL_OR(te.multiplier = 0) THEN 0
-        ELSE EXP(SUM(LN(te.multiplier)))
-    END AS multiplier
+			te.attack_type,
+			(
+				CASE
+					WHEN BOOL_OR(te.multiplier = 0) THEN 0.0
+					ELSE EXP(
+						SUM(LN(NULLIF(te.multiplier, 0)))
+					)
+				END
+			)::double precision AS multiplier
 		FROM type_effectiveness te
-		JOIN pokemon_types pt ON pt.type_name = te.defense_type
+		JOIN pokemon_types pt
+			ON pt.type_name = te.defense_type
 		WHERE pt.pokemon_id = $1
 		GROUP BY te.attack_type
 		ORDER BY te.attack_type
 	`, id)
+
 	if err != nil {
+		log.Printf("GetPokemonDetail type matchups query error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to get type matchups"}`, 500)
 		return
 	}
 
 	for rows.Next() {
 		var item TypeMatchup
+
 		if err := rows.Scan(&item.Type, &item.Multiplier); err != nil {
 			rows.Close()
+			log.Printf("GetPokemonDetail type matchups scan error (ID %d): %v", id, err)
 			http.Error(w, `{"error":"Failed to read type matchups"}`, 500)
 			return
 		}
@@ -465,8 +543,10 @@ END
 			result.Resistances = append(result.Resistances, item)
 		}
 	}
+
 	if err := rows.Err(); err != nil {
 		rows.Close()
+		log.Printf("GetPokemonDetail type matchups rows error (ID %d): %v", id, err)
 		http.Error(w, `{"error":"Failed to read type matchups"}`, 500)
 		return
 	}
