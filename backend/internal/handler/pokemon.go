@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -39,6 +40,9 @@ func (h *PokemonHandler) GetPokemon(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	typeName := strings.TrimSpace(r.URL.Query().Get("type"))
+
 	if page < 1 {
 		page = 1
 	}
@@ -54,8 +58,23 @@ func (h *PokemonHandler) GetPokemon(w http.ResponseWriter, r *http.Request) {
 	var total int
 
 	err := h.DB.QueryRow(ctx, `
-		SELECT COUNT(*) FROM pokemons
-	`).Scan(&total)
+    SELECT COUNT(*)
+    FROM pokemons p
+    WHERE (
+        $1 = ''
+        OR p.name ILIKE '%' || $1 || '%'
+        OR p.id::text = $1
+    )
+    AND (
+        $2 = ''
+        OR EXISTS (
+            SELECT 1
+            FROM pokemon_types pt
+            WHERE pt.pokemon_id = p.id
+            AND LOWER(pt.type_name) = LOWER($2)
+        )
+    )
+`, search, typeName).Scan(&total)
 
 	if err != nil {
 		http.Error(w, `{"error":"Failed to count Pokemon"}`, http.StatusInternalServerError)
@@ -63,21 +82,35 @@ func (h *PokemonHandler) GetPokemon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.DB.Query(ctx, `
-		SELECT
-			p.id,
-			p.name,
-			p.artwork_url,
-			COALESCE(
-				ARRAY_AGG(pt.type_name ORDER BY pt.slot)
-				FILTER (WHERE pt.type_name IS NOT NULL),
-				ARRAY[]::text[]
-			) AS types
-		FROM pokemons p
-		LEFT JOIN pokemon_types pt ON pt.pokemon_id = p.id
-		GROUP BY p.id, p.name, p.artwork_url
-		ORDER BY p.id
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+    SELECT
+        p.id,
+        p.name,
+        p.artwork_url,
+        COALESCE(
+            ARRAY_AGG(pt.type_name ORDER BY pt.slot)
+            FILTER (WHERE pt.type_name IS NOT NULL),
+            ARRAY[]::text[]
+        ) AS types
+    FROM pokemons p
+    LEFT JOIN pokemon_types pt ON pt.pokemon_id = p.id
+    WHERE (
+        $1 = ''
+        OR p.name ILIKE '%' || $1 || '%'
+        OR p.id::text = $1
+    )
+    AND (
+        $2 = ''
+        OR EXISTS (
+            SELECT 1
+            FROM pokemon_types filter_pt
+            WHERE filter_pt.pokemon_id = p.id
+            AND LOWER(filter_pt.type_name) = LOWER($2)
+        )
+    )
+    GROUP BY p.id, p.name, p.artwork_url
+    ORDER BY p.id
+    LIMIT $3 OFFSET $4
+`, search, typeName, limit, offset)
 
 	if err != nil {
 		http.Error(w, `{"error":"Failed to get Pokemon"}`, http.StatusInternalServerError)
