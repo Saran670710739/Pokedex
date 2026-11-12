@@ -150,6 +150,13 @@ func main() {
 		),
 	)
 
+	mux.Handle(
+		"PUT /api/admin/users/{id}",
+		authHandler.RequireAdmin(
+			http.HandlerFunc(adminHandler.UpdateUser),
+		),
+	)
+
 	// =================================
 	// Favorites API
 	// =================================

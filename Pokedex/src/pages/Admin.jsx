@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getAdminSummary, getAdminUsers } from "../api/backend";
+import { getAdminSummary, getAdminUsers, updateAdminUser } from "../api/backend";
 
 // Pure sample data for /ui-preview/admin. No real user records are exposed.
 const DEMO_USERS = [
@@ -29,6 +29,8 @@ function Admin({ preview = false }) {
   const [retryKey, setRetryKey] = useState(0);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [savingUserId, setSavingUserId] = useState(null);
+const [actionMessage, setActionMessage] = useState("");
 
   useEffect(() => {
     if (preview) return;
@@ -53,6 +55,43 @@ function Admin({ preview = false }) {
       ignore = true;
     };
   }, [preview, retryKey]);
+
+  const handleUpdateUser = async (person, newRole, newStatus) => {
+  if (preview) return;
+
+  const confirmed = window.confirm(
+    `ยืนยันการแก้ไขบัญชี ${person.name || person.email} ?`
+  );
+
+  if (!confirmed) return;
+
+  setSavingUserId(person.id);
+  setActionMessage("");
+
+  try {
+    await updateAdminUser(person.id, newRole, newStatus);
+
+    const [summaryData, usersData] = await Promise.all([
+      getAdminSummary(),
+      getAdminUsers(),
+    ]);
+
+    const list = Array.isArray(usersData)
+      ? usersData
+      : (usersData?.users || usersData?.data || []);
+
+    setUsers(Array.isArray(list) ? list : []);
+    setSummary(summaryData?.data || summaryData);
+
+    setActionMessage("อัปเดตข้อมูลสมาชิกสำเร็จ");
+  } catch (err) {
+    setActionMessage(
+      `เกิดข้อผิดพลาด: ${err.message || "ไม่สามารถแก้ไขสมาชิกได้"}`
+    );
+  } finally {
+    setSavingUserId(null);
+  }
+};
 
   const visibleUsers = useMemo(
     () => users.filter((person) => {
@@ -124,7 +163,13 @@ function Admin({ preview = false }) {
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr><th className="px-6 py-4">Member</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th><th className="px-6 py-4">ID</th></tr>
+                    <tr>
+  <th className="px-6 py-4">Member</th>
+  <th className="px-6 py-4">Role</th>
+  <th className="px-6 py-4">Status</th>
+  <th className="px-6 py-4">ID</th>
+  {!preview && <th className="px-6 py-4">Actions</th>}
+</tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {visibleUsers.map((person) => (
@@ -136,13 +181,59 @@ function Admin({ preview = false }) {
                         <td className="px-6 py-4"><span className={`rounded-full px-3 py-1 text-xs font-bold ${person.role === "admin" ? "bg-violet-100 text-violet-700" : "bg-blue-50 text-blue-700"}`}>{person.role || "member"}</span></td>
                         <td className="px-6 py-4"><span className="text-slate-600">{person.status || "—"}</span></td>
                         <td className="px-6 py-4 text-slate-400">{person.id}</td>
+
+                        {!preview && (
+  <td className="px-6 py-4">
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        disabled={savingUserId === person.id}
+        onClick={() =>
+          handleUpdateUser(
+            person,
+            person.role === "admin" ? "member" : "admin",
+            person.status
+          )
+        }
+        className="rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+      >
+        {person.role === "admin" ? "ลดสิทธิ์ Admin" : "ตั้งเป็น Admin"}
+      </button>
+
+      <button
+        type="button"
+        disabled={savingUserId === person.id}
+        onClick={() =>
+          handleUpdateUser(
+            person,
+            person.role,
+            person.status === "active" ? "disabled" : "active"
+          )
+        }
+        className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+      >
+        {person.status === "active" ? "ระงับบัญชี" : "เปิดใช้งาน"}
+      </button>
+    </div>
+  </td>
+)}
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 {visibleUsers.length === 0 && <p className="p-8 text-center text-sm text-slate-500">ไม่พบสมาชิกตามเงื่อนไขที่ค้นหา</p>}
               </div>
-              <div className="border-t border-slate-100 px-6 py-4 text-xs text-slate-400">แสดง {visibleUsers.length} จาก {users.length} รายการ</div>
+              <div className="border-t border-slate-100 px-6 py-4">
+  <p className="text-xs text-slate-400">
+    แสดง {visibleUsers.length} จาก {users.length} รายการ
+  </p>
+
+  {actionMessage && (
+    <p role="status" className="mt-2 text-sm font-medium text-blue-600">
+      {actionMessage}
+    </p>
+  )}
+</div>
             </section>
             <p className="mt-6 text-sm leading-6 text-slate-500">
               การแก้สิทธิ์ ลบบัญชี หรือระงับสมาชิกยังไม่เปิดใช้งานจนกว่า Go Backend จะตรวจสิทธิ์ Admin จริง

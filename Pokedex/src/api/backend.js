@@ -147,6 +147,16 @@ export function getAdminUsers() {
   return request("/api/admin/users");
 }
 
+export function updateAdminUser(userId, role, status) {
+  return request(`/api/admin/users/${userId}`, {
+    method: "PUT",
+    body: {
+      role,
+      status,
+    },
+  });
+}
+
 // Reviews
 
 export function getPokemonReviews(pokemonId) {

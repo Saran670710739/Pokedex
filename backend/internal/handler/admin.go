@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -148,5 +150,87 @@ func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"users": users,
 		"total": len(users),
+	})
+}
+
+// PUT /api/admin/users/{id}
+func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Invalid user ID",
+		})
+		return
+	}
+
+	currentID, ok := r.Context().Value(authUserIDKey).(int64)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	if id == currentID {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "Cannot modify your own account",
+		})
+		return
+	}
+
+	var req struct {
+		Role   string `json:"role"`
+		Status string `json:"status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Invalid JSON",
+		})
+		return
+	}
+
+	if req.Role != "member" && req.Role != "admin" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Invalid role",
+		})
+		return
+	}
+
+	if req.Status != "active" && req.Status != "disabled" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Invalid status",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	var user AdminUser
+
+	err = h.DB.QueryRow(ctx, `
+        UPDATE users
+        SET role = $1, status = $2
+        WHERE id = $3
+        RETURNING id, name, email, role, status
+    `, req.Role, req.Status, id).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Role,
+		&user.Status,
+	)
+
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Could not update user",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "User updated successfully",
+		"user":    user,
 	})
 }
