@@ -3,15 +3,24 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getPokemonReviews,
   createPokemonReview,
+  updatePokemonReview,
+  deletePokemonReview,
 } from "../api/backend";
 
+import { useAuth } from "../auth/AuthContext";
 function ReviewForm({ pokemonId, pokemonName }) {
+  const { user } = useAuth();
   const [review, setReview] = useState("");
   const [rating, setRating] = useState(5);
   const [reviews, setReviews] = useState([]);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("typing");
   const [loading, setLoading] = useState(true);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editComment, setEditComment] = useState("");
+  const [editRating, setEditRating] = useState(5);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const loadReviews = useCallback(async () => {
   try {
@@ -71,6 +80,52 @@ function ReviewForm({ pokemonId, pokemonName }) {
       }
     }
   }
+
+  async function handleUpdate(reviewId) {
+  if (editComment.trim().length < 10) {
+    setError("รีวิวสั้นเกินไป อย่างน้อย 10 ตัวอักษร");
+    return;
+  }
+
+  try {
+    setActionLoading(true);
+    setError("");
+
+    await updatePokemonReview(
+      reviewId,
+      editRating,
+      editComment.trim()
+    );
+
+    setEditingId(null);
+    await loadReviews();
+  } catch (err) {
+    setError(err.message || "แก้ไขรีวิวไม่สำเร็จ");
+  } finally {
+    setActionLoading(false);
+  }
+}
+
+async function handleDelete(reviewId) {
+  const confirmed = window.confirm(
+    "คุณต้องการลบรีวิวนี้ใช่หรือไม่?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setActionLoading(true);
+    setError("");
+
+    await deletePokemonReview(reviewId);
+
+    await loadReviews();
+  } catch (err) {
+    setError(err.message || "ลบรีวิวไม่สำเร็จ");
+  } finally {
+    setActionLoading(false);
+  }
+}
 
   return (
     <section className="space-y-5">
@@ -175,15 +230,93 @@ function ReviewForm({ pokemonId, pokemonName }) {
                 </p>
               </div>
 
-              <p className="mt-2 whitespace-pre-wrap text-sm">
-                {item.comment}
-              </p>
 
-              <p className="mt-2 text-xs text-gray-400">
-                {item.created_at
-                  ? new Date(item.created_at).toLocaleDateString("th-TH")
-                  : ""}
-              </p>
+{item.user_id === user?.id && editingId === item.id ? (
+  <div className="mt-3 space-y-3">
+    <div className="flex gap-2">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => setEditRating(star)}
+          disabled={actionLoading}
+          className={`text-xl ${
+            star <= editRating ? "text-yellow-400" : "text-gray-300"
+          }`}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+
+    <textarea
+      value={editComment}
+      onChange={(e) => setEditComment(e.target.value)}
+      rows={3}
+      disabled={actionLoading}
+      className="w-full rounded-lg border p-2"
+    />
+
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => handleUpdate(item.id)}
+        disabled={actionLoading}
+        className="rounded-lg bg-blue-600 px-3 py-2 text-white"
+      >
+        บันทึก
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setEditingId(null)}
+        disabled={actionLoading}
+        className="rounded-lg bg-gray-200 px-3 py-2"
+      >
+        ยกเลิก
+      </button>
+    </div>
+  </div>
+) : (
+  <>
+    <p className="mt-2 whitespace-pre-wrap text-sm">
+      {item.comment}
+    </p>
+
+    {item.user_id === user?.id && (
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setEditingId(item.id);
+            setEditComment(item.comment);
+            setEditRating(item.rating);
+            setError("");
+          }}
+          className="rounded-lg bg-blue-100 px-3 py-1 text-sm text-blue-700"
+        >
+          แก้ไข
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleDelete(item.id)}
+          disabled={actionLoading}
+          className="rounded-lg bg-red-100 px-3 py-1 text-sm text-red-700"
+        >
+          ลบ
+        </button>
+      </div>
+    )}
+  </>
+)}
+
+<p className="mt-2 text-xs text-gray-400">
+  {item.created_at
+    ? new Date(item.created_at).toLocaleDateString("th-TH")
+    : ""}
+</p>
+
             </article>
           ))
         )}
