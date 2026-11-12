@@ -61,7 +61,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set(
 				"Access-Control-Allow-Methods",
-				"GET, POST, PUT, DELETE, OPTIONS",
+				"GET, POST, PUT, PATCH, DELETE, OPTIONS",
 			)
 			w.Header().Set(
 				"Access-Control-Allow-Headers",
@@ -128,6 +128,13 @@ func main() {
 	mux.Handle(
 		"GET /api/auth/me",
 		authHandler.RequireAuth(http.HandlerFunc(authHandler.Me)),
+	)
+
+	mux.Handle(
+		"PATCH /api/users/me/password",
+		authHandler.RequireAuth(
+			http.HandlerFunc(authHandler.ChangePassword),
+		),
 	)
 
 	// =================================

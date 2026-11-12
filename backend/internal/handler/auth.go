@@ -276,6 +276,120 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(authUserIDKey).(int64)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	var req struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Invalid request body",
+		})
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Current password and new password are required",
+		})
+		return
+	}
+
+	if len(req.NewPassword) < 8 || len(req.NewPassword) > 72 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "New password must be between 8 and 72 bytes",
+		})
+		return
+	}
+
+	if req.CurrentPassword == req.NewPassword {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "New password must be different from current password",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	var passwordHash string
+	var status string
+
+	err := h.DB.QueryRow(ctx, `
+		SELECT password_hash, status
+		FROM users
+		WHERE id = $1
+	`, userID).Scan(&passwordHash, &status)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "User not found",
+		})
+		return
+	}
+
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Could not verify account",
+		})
+		return
+	}
+
+	if status != "active" {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "Account is not active",
+		})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword(
+		[]byte(passwordHash),
+		[]byte(req.CurrentPassword),
+	); err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "Current password is incorrect",
+		})
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword(
+		[]byte(req.NewPassword),
+		bcrypt.DefaultCost,
+	)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Could not secure new password",
+		})
+		return
+	}
+
+	_, err = h.DB.Exec(ctx, `
+		UPDATE users
+		SET password_hash = $1
+		WHERE id = $2
+	`, string(newHash), userID)
+
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Could not update password",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Password updated successfully",
+	})
+}
+
 func (h *AuthHandler) createToken(user AuthUser) (string, error) {
 	claims := AuthClaims{
 		UserID: user.ID,
