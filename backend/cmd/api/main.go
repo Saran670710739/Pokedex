@@ -131,6 +131,13 @@ func main() {
 	)
 
 	mux.Handle(
+		"PATCH /api/users/me",
+		authHandler.RequireAuth(
+			http.HandlerFunc(authHandler.UpdateMe),
+		),
+	)
+
+	mux.Handle(
 		"PATCH /api/users/me/password",
 		authHandler.RequireAuth(
 			http.HandlerFunc(authHandler.ChangePassword),

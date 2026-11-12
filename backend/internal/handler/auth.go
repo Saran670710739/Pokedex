@@ -390,6 +390,98 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(authUserIDKey).(int64)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "Unauthorized",
+		})
+		return
+	}
+
+	var req struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Invalid request body",
+		})
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	if req.Name == "" || req.Email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Name and email are required",
+		})
+		return
+	}
+
+	if len(req.Name) > 100 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Name must not exceed 100 characters",
+		})
+		return
+	}
+
+	emailRegex := regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+	if !emailRegex.MatchString(req.Email) || len(req.Email) > 254 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Invalid email address",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	var user AuthUser
+
+	err := h.DB.QueryRow(ctx, `
+		UPDATE users
+		SET name = $1, email = $2
+		WHERE id = $3
+		RETURNING id, name, email, role, status
+	`, req.Name, req.Email, userID).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Role,
+		&user.Status,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "User not found",
+		})
+		return
+	}
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "Email is already registered",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Could not update profile",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Profile updated successfully",
+		"user":    user,
+	})
+}
+
 func (h *AuthHandler) createToken(user AuthUser) (string, error) {
 	claims := AuthClaims{
 		UserID: user.ID,
